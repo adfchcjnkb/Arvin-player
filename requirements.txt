@@ -1,0 +1,22 @@
+# Arvin Player - Required Libraries
+# Install with: pip install -r requirements.txt
+
+# Core GUI framework
+PyQt6>=6.5.0
+PyQt6-Qt6>=6.5.0
+PyQt6-sip>=13.5.0
+
+# Audio playback (part of PyQt6 multimedia)
+PyQt6-multimedia>=6.5.0
+
+# Metadata extraction from audio files
+mutagen>=1.46.0
+
+# Optional: For better audio format support (if needed)
+# pyaudio>=0.2.11
+
+# Optional: For additional audio codecs
+# pydub>=0.25.1
+
+# Optional: For waveform generation
+# numpy>=1.24.0
