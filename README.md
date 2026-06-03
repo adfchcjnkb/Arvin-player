@@ -251,7 +251,6 @@ python main.py
 ├── 📄 core.py          # Core classes
 ├── 📄 widgets.py       # Custom widgets
 ├── 📄 player.py        # Main player
-├── 📁 __pycache__/     # Python cache
 ├── 📄 icon.ico         # Application icon
 ├── 📄 Dark.png         # Dark theme preview
 ├── 📄 Light.png        # Light theme preview
