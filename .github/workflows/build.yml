@@ -138,8 +138,13 @@ jobs:
       - name: Build installer
         run: |
           New-Item -ItemType Directory -Force -Path out | Out-Null
-          & "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" `
-            "/DAppVersion=$env:APP_VERSION" "/Oout" packaging\windows\installer.iss
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"
+          }
+          Write-Host "Using $iscc"
+          & $iscc "/DAppVersion=$env:APP_VERSION" "/Oout" packaging\windows\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
         shell: pwsh
 
       - name: Stage portable build
@@ -155,6 +160,7 @@ jobs:
 
   macos:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - runner: macos-14
@@ -192,24 +198,32 @@ jobs:
           cp packaging/parch-mp-512.png packaging/ParchMP.iconset/icon_256x256@2x.png
           iconutil -c icns packaging/ParchMP.iconset -o packaging/parch-mp.icns
 
+      - name: Free disk space
+        run: |
+          rm -rf build native/rust/parch_dsp/target ~/Library/Caches/pip || true
+          df -h . | tail -1
+
       - name: Build .dmg
         run: |
           set -e
           mkdir -p out dmgroot
           APP="dmgroot/Parch Music Player.app"
           if [ -d "dist/ParchMP.app" ]; then
-            cp -R "dist/ParchMP.app" "$APP"
+            mv "dist/ParchMP.app" "$APP"
           else
             mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-            cp dist/ParchMP "$APP/Contents/MacOS/ParchMP"
+            mv dist/ParchMP "$APP/Contents/MacOS/ParchMP"
             chmod +x "$APP/Contents/MacOS/ParchMP"
           fi
           cp packaging/parch-mp.icns "$APP/Contents/Resources/parch-mp.icns"
           python packaging/macos/make_plist.py "$APP/Contents/Info.plist" "$APP_VERSION"
           codesign --force --deep --sign - "$APP" || true
           ln -s /Applications dmgroot/Applications
-          hdiutil create -volname "Parch Music Player" -srcfolder dmgroot -ov -format UDZO \
+          df -h . | tail -1
+          hdiutil create -volname "Parch Music Player" -srcfolder dmgroot -ov \
+            -format UDZO -fs HFS+ \
             "out/ParchMP-${APP_VERSION}-macos-${{ matrix.arch }}.dmg"
+          ls -lh out/
 
       - uses: actions/upload-artifact@v4
         with:
