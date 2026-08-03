@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Parch Music Player
+GenericName=Music Player
+Comment=Fast music player with a real-time equalizer, waveform seeking and moodbars
+Exec=parch-mp %F
+Icon=parch-mp
+Terminal=false
+Categories=AudioVideo;Audio;Player;Music;
+MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/ogg;audio/x-vorbis+ogg;audio/opus;audio/mp4;audio/aac;audio/x-wav;audio/x-ms-wma;audio/x-aiff;audio/x-musepack;audio/x-ape;audio/x-wavpack;application/x-cue;audio/x-mpegurl;audio/x-scpls;
+Keywords=music;audio;player;equalizer;playlist;
+StartupNotify=true
+StartupWMClass=ParchMP

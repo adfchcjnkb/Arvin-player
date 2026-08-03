@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.dylib
+build/
+dist/
+lib/
+native/build/
+native/parch_core*
+native/rust/parch_dsp/target/
+*.spec.bak
+.venv/
+venv/
+*.egg-info/
+.DS_Store
+Thumbs.db
+New Folder/
+*.zip
+
+# آهنگ تست محلی
+*.mp3
+*.flac
+*.wav
+*.m4a
+*.ogg
+
+# آیکون‌های تولیدشده
+packaging/parch-mp-*.png
+packaging/parch-mp.png
+packaging/parch-mp.ico
+packaging/parch-mp.icns
+packaging/ParchMP.iconset/

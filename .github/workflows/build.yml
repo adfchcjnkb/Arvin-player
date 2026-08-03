@@ -1,0 +1,236 @@
+name: Build installers
+
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  APP_VERSION: "9.0.0"
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xinerama0 libpulse0 libasound2 \
+            fuse libfuse2 rpm file desktop-file-utils
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build native cores and application
+        run: python build.py
+
+      - name: Generate icons
+        run: xvfb-run -a python packaging/make_icon.py packaging/parch-mp.png
+
+      - name: Stage AppDir
+        run: |
+          set -e
+          APPDIR=AppDir
+          mkdir -p $APPDIR/usr/bin $APPDIR/usr/share/applications
+          cp dist/ParchMP $APPDIR/usr/bin/parch-mp
+          chmod +x $APPDIR/usr/bin/parch-mp
+          cp packaging/linux/parch-mp.desktop $APPDIR/usr/share/applications/
+          cp packaging/linux/parch-mp.desktop $APPDIR/parch-mp.desktop
+          for size in 16 24 32 48 64 128 256 512; do
+            d=$APPDIR/usr/share/icons/hicolor/${size}x${size}/apps
+            mkdir -p $d
+            cp packaging/parch-mp-${size}.png $d/parch-mp.png
+          done
+          cp packaging/parch-mp-256.png $APPDIR/parch-mp.png
+          ln -sf usr/bin/parch-mp $APPDIR/AppRun
+
+      - name: Build AppImage
+        run: |
+          set -e
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run \
+            AppDir out/ParchMP-${APP_VERSION}-x86_64.AppImage || \
+          (mkdir -p out && ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run \
+            AppDir out/ParchMP-${APP_VERSION}-x86_64.AppImage)
+
+      - name: Build tarball
+        run: |
+          mkdir -p out staging/parch-mp-${APP_VERSION}
+          cp dist/ParchMP staging/parch-mp-${APP_VERSION}/parch-mp
+          cp packaging/linux/parch-mp.desktop packaging/parch-mp-256.png README.md \
+             staging/parch-mp-${APP_VERSION}/
+          tar -C staging -czf out/ParchMP-${APP_VERSION}-linux-x86_64.tar.gz \
+             parch-mp-${APP_VERSION}
+
+      - name: Build .deb and .rpm
+        run: |
+          set -e
+          pip install fpm-like || true
+          gem install --no-document fpm
+          mkdir -p pkgroot/usr/bin pkgroot/usr/share/applications
+          cp dist/ParchMP pkgroot/usr/bin/parch-mp
+          chmod +x pkgroot/usr/bin/parch-mp
+          cp packaging/linux/parch-mp.desktop pkgroot/usr/share/applications/
+          for size in 16 24 32 48 64 128 256 512; do
+            d=pkgroot/usr/share/icons/hicolor/${size}x${size}/apps
+            mkdir -p $d
+            cp packaging/parch-mp-${size}.png $d/parch-mp.png
+          done
+          for fmt in deb rpm; do
+            fpm -s dir -t $fmt -n parch-mp -v ${APP_VERSION} \
+              --description "Parch Music Player" \
+              --url "https://github.com/adfchcjnkb/Arvin-player" \
+              --license "MIT" --maintainer "Arvin" \
+              --package out/ -C pkgroot .
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-installers
+          path: out/*
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build native cores and application
+        run: python build.py
+
+      - name: Generate icons
+        run: python packaging/make_icon.py packaging/parch-mp.png
+
+      - name: Build installer
+        run: |
+          iscc /DAppVersion=$env:APP_VERSION packaging\windows\installer.iss /O"out"
+        shell: pwsh
+
+      - name: Stage portable build
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Copy-Item dist\ParchMP.exe "out\ParchMP-$env:APP_VERSION-windows-portable.exe"
+        shell: pwsh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: out/*
+
+  macos:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+          - runner: macos-13
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build native cores and application
+        run: python build.py
+
+      - name: Generate icons
+        run: python packaging/make_icon.py packaging/parch-mp.png
+
+      - name: Build .icns
+        run: |
+          set -e
+          mkdir -p packaging/ParchMP.iconset
+          for size in 16 32 128 256 512; do
+            cp packaging/parch-mp-${size}.png packaging/ParchMP.iconset/icon_${size}x${size}.png
+          done
+          cp packaging/parch-mp-512.png packaging/ParchMP.iconset/icon_256x256@2x.png
+          iconutil -c icns packaging/ParchMP.iconset -o packaging/parch-mp.icns
+
+      - name: Build .dmg
+        run: |
+          set -e
+          mkdir -p out dmgroot
+          if [ -d "dist/ParchMP.app" ]; then
+            cp -R dist/ParchMP.app dmgroot/
+          else
+            mkdir -p "dmgroot/Parch Music Player.app/Contents/MacOS"
+            mkdir -p "dmgroot/Parch Music Player.app/Contents/Resources"
+            cp dist/ParchMP "dmgroot/Parch Music Player.app/Contents/MacOS/ParchMP"
+            chmod +x "dmgroot/Parch Music Player.app/Contents/MacOS/ParchMP"
+            cp packaging/parch-mp.icns "dmgroot/Parch Music Player.app/Contents/Resources/"
+            cat > "dmgroot/Parch Music Player.app/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleName</key><string>Parch Music Player</string>
+            <key>CFBundleDisplayName</key><string>Parch Music Player</string>
+            <key>CFBundleExecutable</key><string>ParchMP</string>
+            <key>CFBundleIdentifier</key><string>org.parch.musicplayer</string>
+            <key>CFBundleVersion</key><string>${APP_VERSION}</string>
+            <key>CFBundleShortVersionString</key><string>${APP_VERSION}</string>
+            <key>CFBundleIconFile</key><string>parch-mp.icns</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict></plist>
+          PLIST
+          fi
+          ln -s /Applications dmgroot/Applications
+          hdiutil create -volname "Parch Music Player" -srcfolder dmgroot -ov -format UDZO \
+            "out/ParchMP-${APP_VERSION}-macos-${{ matrix.arch }}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-installers-${{ matrix.arch }}
+          path: out/*
+
+  release:
+    needs: [linux, windows, macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true

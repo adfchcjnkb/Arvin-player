@@ -1,0 +1,30 @@
+# Parch MP - Required Libraries
+# Install with: pip install -r requirements.txt
+
+# Core GUI framework
+# NOTE: PyQt6 >= 6.8.0 is required for QAudioBufferOutput, which the
+# real-time audio visualizer and the always-on realtime equalizer use
+# to tap into actual decoded audio frames.
+PyQt6>=6.8.0
+PyQt6-Qt6>=6.8.0
+PyQt6-sip>=13.5.0
+
+# Audio playback (part of PyQt6 multimedia)
+PyQt6-multimedia>=6.8.0
+
+# Metadata extraction from audio files
+mutagen>=1.46.0
+
+# Numeric backbone, and the fallback paths used when the native cores
+# are not compiled: NumPy for analysis, SciPy for the equalizer.
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Packaging
+pyinstaller>=6.0.0
+setuptools>=68.0.0
+
+# Native cores (optional, built by build.py - not pip packages):
+#   parch_dsp  - Rust,  needs a cargo toolchain from https://rustup.rs
+#   parch_core - C++17, needs GCC / Clang / MSVC
+# Without them the app runs on the NumPy + SciPy fallbacks.
