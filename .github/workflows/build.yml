@@ -32,7 +32,8 @@ jobs:
             libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
             libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
             libxcb-shape0 libxcb-xinerama0 libpulse0 libasound2 \
-            fuse libfuse2 rpm file desktop-file-utils
+            fuse libfuse2 rpm file desktop-file-utils \
+            ruby ruby-dev build-essential
 
       - name: Install Python dependencies
         run: |
@@ -43,7 +44,9 @@ jobs:
         run: python build.py
 
       - name: Generate icons
-        run: xvfb-run -a python packaging/make_icon.py packaging/parch-mp.png
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python packaging/make_icon.py packaging/parch-mp.png
 
       - name: Stage AppDir
         run: |
@@ -65,12 +68,11 @@ jobs:
       - name: Build AppImage
         run: |
           set -e
+          mkdir -p out
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
           ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run \
-            AppDir out/ParchMP-${APP_VERSION}-x86_64.AppImage || \
-          (mkdir -p out && ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run \
-            AppDir out/ParchMP-${APP_VERSION}-x86_64.AppImage)
+            AppDir out/ParchMP-${APP_VERSION}-x86_64.AppImage
 
       - name: Build tarball
         run: |
@@ -84,8 +86,7 @@ jobs:
       - name: Build .deb and .rpm
         run: |
           set -e
-          pip install fpm-like || true
-          gem install --no-document fpm
+          sudo gem install --no-document fpm
           mkdir -p pkgroot/usr/bin pkgroot/usr/share/applications
           cp dist/ParchMP pkgroot/usr/bin/parch-mp
           chmod +x pkgroot/usr/bin/parch-mp
@@ -130,9 +131,15 @@ jobs:
       - name: Generate icons
         run: python packaging/make_icon.py packaging/parch-mp.png
 
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+        shell: pwsh
+
       - name: Build installer
         run: |
-          iscc /DAppVersion=$env:APP_VERSION packaging\windows\installer.iss /O"out"
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          & "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" `
+            "/DAppVersion=$env:APP_VERSION" "/Oout" packaging\windows\installer.iss
         shell: pwsh
 
       - name: Stage portable build
@@ -189,30 +196,17 @@ jobs:
         run: |
           set -e
           mkdir -p out dmgroot
+          APP="dmgroot/Parch Music Player.app"
           if [ -d "dist/ParchMP.app" ]; then
-            cp -R dist/ParchMP.app dmgroot/
+            cp -R "dist/ParchMP.app" "$APP"
           else
-            mkdir -p "dmgroot/Parch Music Player.app/Contents/MacOS"
-            mkdir -p "dmgroot/Parch Music Player.app/Contents/Resources"
-            cp dist/ParchMP "dmgroot/Parch Music Player.app/Contents/MacOS/ParchMP"
-            chmod +x "dmgroot/Parch Music Player.app/Contents/MacOS/ParchMP"
-            cp packaging/parch-mp.icns "dmgroot/Parch Music Player.app/Contents/Resources/"
-            cat > "dmgroot/Parch Music Player.app/Contents/Info.plist" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>CFBundleName</key><string>Parch Music Player</string>
-            <key>CFBundleDisplayName</key><string>Parch Music Player</string>
-            <key>CFBundleExecutable</key><string>ParchMP</string>
-            <key>CFBundleIdentifier</key><string>org.parch.musicplayer</string>
-            <key>CFBundleVersion</key><string>${APP_VERSION}</string>
-            <key>CFBundleShortVersionString</key><string>${APP_VERSION}</string>
-            <key>CFBundleIconFile</key><string>parch-mp.icns</string>
-            <key>CFBundlePackageType</key><string>APPL</string>
-            <key>NSHighResolutionCapable</key><true/>
-          </dict></plist>
-          PLIST
+            mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+            cp dist/ParchMP "$APP/Contents/MacOS/ParchMP"
+            chmod +x "$APP/Contents/MacOS/ParchMP"
           fi
+          cp packaging/parch-mp.icns "$APP/Contents/Resources/parch-mp.icns"
+          python packaging/macos/make_plist.py "$APP/Contents/Info.plist" "$APP_VERSION"
+          codesign --force --deep --sign - "$APP" || true
           ln -s /Applications dmgroot/Applications
           hdiutil create -volname "Parch Music Player" -srcfolder dmgroot -ov -format UDZO \
             "out/ParchMP-${APP_VERSION}-macos-${{ matrix.arch }}.dmg"
